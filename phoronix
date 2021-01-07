@@ -1,9 +1,22 @@
 #!/usr/bin/env python3
 
-#import feedparser
+import feedparser
+feed = feedparser.parse("https://www.phoronix.com/rss.php")
 
-#feed = feedparser.parse("https://www.phoronix.com/rss.php")
+last_read_id = ""
+with open("phoronix-last", "r") as last_read_file:
+    last_read_id = last_read_file.read().strip()
 
-last_file = open("phoronix-last", "r")
-last = last_file.read()
-print(last)
+feed_unread = []
+for item in feed.entries:
+    if item.id == last_read_id:
+        break
+
+    print(item.id)
+    feed_unread.append(item)
+
+if not feed_unread:
+    exit(0)
+
+with open("phoronix-last", "w") as last_read_file:
+    last_read_file.write(feed_unread[0].id)
