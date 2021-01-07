@@ -1,0 +1,9 @@
+#!/usr/bin/env python3
+
+#import feedparser
+
+#feed = feedparser.parse("https://www.phoronix.com/rss.php")
+
+last_file = open("phoronix-last", "r")
+last = last_file.read()
+print(last)
