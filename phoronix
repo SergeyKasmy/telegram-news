@@ -3,9 +3,12 @@ import feedparser
 import telegram
 from time import sleep
 
+# TODO: split everything into separate functions
+
 feed = feedparser.parse("https://www.phoronix.com/rss.php")
 
 last_read_id = ""
+# TODO: create the file automatically if it doesn't exist
 with open("phoronix-last", "r") as last_read_file:
     last_read_id = last_read_file.read().strip()
 
@@ -16,20 +19,31 @@ for item in feed.entries:
     feed_unread.append(item)
 
 if not feed_unread:
+    # TODO: mb there's a better way?
     exit(0)
 feed_unread.reverse()
 
 token = ""
+# TODO: create the file automatically if it doesn't exist
 with open("token", "r") as token_file:
     token = token_file.read().strip()
 
 chat_id = ""
+# TODO: create the file automatically if it doesn't exist
 with open("chat_id", "r") as chat_id_file:
     chat_id = chat_id_file.read().strip()
 
 bot = telegram.Bot(token)
+counter = 0
 for article in feed_unread:
+    # telegram doesn't allow sending more than 20 messages per minute to the same chat
+    if counter >= 20:
+        counter = 0
+        sleep(60)
+
+    # TODO: check for errors
     bot.send_message(chat_id, f"<a href=\"{article.link}\">{article.title}</a>\n{article.description}", parse_mode="HTML", disable_web_page_preview=True)
+    counter += 1
     sleep(1)
 
 with open("phoronix-last", "w") as last_read_file:
