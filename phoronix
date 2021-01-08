@@ -1,15 +1,18 @@
 #!/usr/bin/env python3
+# TODO: replace stderr with "import logging"
+from sys import stderr
 import feedparser
 import telegram
 from time import sleep
 
 def get_feed():
-    feed = feedparser.parse("https://www.phoronix.com/rss.php")
-    
+    feed = feedparser.parse("https://www.phoronix.com/rss.php") 
     last_read_id = ""
-    # TODO: create the file automatically if it doesn't exist
-    with open("phoronix-last", "r") as last_read_file:
-        last_read_id = last_read_file.read().strip()
+    try:
+        with open("phoronix-last", "r") as last_read_file:
+            last_read_id = last_read_file.read().strip()
+    except OSError:
+        pass
     
     feed_unread = []
     for item in feed.entries:
@@ -26,14 +29,21 @@ def get_feed():
 
 def update(feed):
     token = ""
-    # TODO: create the file automatically if it doesn't exist
-    with open("token", "r") as token_file:
-        token = token_file.read().strip()
-    
+    try:
+        with open("token", "r") as token_file:
+            token = token_file.read().strip()
+    except OSError:
+        print("token file is not found. Put your bot token in a file called 'token' in the working directory", file=stderr)
+        exit(1)
+
     chat_id = ""
-    # TODO: create the file automatically if it doesn't exist
-    with open("chat_id", "r") as chat_id_file:
-        chat_id = chat_id_file.read().strip()
+    try:
+        with open("chat_id") as chat_id_file:
+            chat_id = chat_id_file.read().strip()
+    except OSError:
+        print("chat_id file is not found. Put your target chat id in a file called 'chat_id' in the working directory", file=stderr)
+        exit(1)
+
     
     bot = telegram.Bot(token)
     counter = 0
@@ -43,7 +53,6 @@ def update(feed):
             counter = 0
             sleep(60)
     
-        # TODO: check for errors
         bot.send_message(chat_id, f"<a href=\"{article.link}\">{article.title}</a>\n{article.description}", parse_mode="HTML", disable_web_page_preview=True)
         counter += 1
         sleep(1)
