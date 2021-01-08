@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
-
 import feedparser
+import telegram
+from time import sleep
+
 feed = feedparser.parse("https://www.phoronix.com/rss.php")
 
 last_read_id = ""
@@ -11,12 +13,24 @@ feed_unread = []
 for item in feed.entries:
     if item.id == last_read_id:
         break
-
-    print(item.id)
     feed_unread.append(item)
 
 if not feed_unread:
     exit(0)
+feed_unread.reverse()
+
+token = ""
+with open("token", "r") as token_file:
+    token = token_file.read().strip()
+
+chat_id = ""
+with open("chat_id", "r") as chat_id_file:
+    chat_id = chat_id_file.read().strip()
+
+bot = telegram.Bot(token)
+for article in feed_unread:
+    bot.send_message(chat_id, f"<a href=\"{article.link}\">{article.title}</a>\n{article.description}", parse_mode="HTML", disable_web_page_preview=True)
+    sleep(1)
 
 with open("phoronix-last", "w") as last_read_file:
-    last_read_file.write(feed_unread[0].id)
+    last_read_file.write(feed_unread[-1].id)
