@@ -5,61 +5,67 @@ import feedparser
 import telegram
 from time import sleep
 
-def get_feed():
-    feed = feedparser.parse("https://www.phoronix.com/rss.php") 
-    last_read_id = ""
-    try:
-        with open("phoronix-last", "r") as last_read_file:
-            last_read_id = last_read_file.read().strip()
-    except OSError:
-        pass
+class RSS:
+    def get_unread_feed(name: str, url: str):
+        feed = feedparser.parse(url) 
+        last_read_id = ""
+        try:
+            with open(f"last/{name}", "r") as last_read_file:
+                last_read_id = last_read_file.read().strip()
+        except FileNotFoundError:
+            pass
+        
+        feed_unread = []
+        for item in feed.entries:
+            if item.id == last_read_id:
+                break
+            feed_unread.append(item)
+        
+        if not feed_unread:
+            # TODO: mb there's a better way?
+            exit(0)
+        
+        feed_unread.reverse()
+        return feed_unread
     
-    feed_unread = []
-    for item in feed.entries:
-        if item.id == last_read_id:
-            break
-        feed_unread.append(item)
-    
-    if not feed_unread:
-        # TODO: mb there's a better way?
-        exit(0)
-    
-    feed_unread.reverse()
-    return feed_unread
+    def save_last_unread(name: str, id: str):
+        with open("phoronix-last", "w") as last_read_file:
+            #last_read_file.write(id)
+            pass
 
-def update(feed):
-    token = ""
-    try:
-        with open("token", "r") as token_file:
-            token = token_file.read().strip()
-    except OSError:
-        print("token file is not found. Put your bot token in a file called 'token' in the working directory", file=stderr)
-        exit(1)
+class Telegram:
+    # return read/sent sent id
+    def update(feed) -> str:
+        try:
+            with open("token") as token_file:
+                token = token_file.read().strip()
+        except FileNotFoundError:
+            print("token file is not found. Put your bot token in a file called 'token' in the working directory", file=stderr)
+            exit(1)
+    
+        try:
+            with open("chat_id") as chat_id_file:
+                chat_id = chat_id_file.read().strip()
+        except FileNotFoundError:
+            print("chat_id file is not found. Put your target chat id in a file called 'chat_id' in the working directory", file=stderr)
+            exit(1)
+    
+        
+        bot = telegram.Bot(token)
+        counter = 0
+        for article in feed:
+            # telegram doesn't allow sending more than 20 messages per minute to the same chat
+            if counter >= 20:
+                counter = 0
+                sleep(60)
+        
+            bot.send_message(chat_id, f"<a href=\"{article.link}\">{article.title}</a>\n{article.description}", parse_mode="HTML", disable_web_page_preview=True)
+            counter += 1
+            sleep(1)
 
-    chat_id = ""
-    try:
-        with open("chat_id") as chat_id_file:
-            chat_id = chat_id_file.read().strip()
-    except OSError:
-        print("chat_id file is not found. Put your target chat id in a file called 'chat_id' in the working directory", file=stderr)
-        exit(1)
-
-    
-    bot = telegram.Bot(token)
-    counter = 0
-    for article in feed:
-        # telegram doesn't allow sending more than 20 messages per minute to the same chat
-        if counter >= 20:
-            counter = 0
-            sleep(60)
-    
-        bot.send_message(chat_id, f"<a href=\"{article.link}\">{article.title}</a>\n{article.description}", parse_mode="HTML", disable_web_page_preview=True)
-        counter += 1
-        sleep(1)
-    
-    with open("phoronix-last", "w") as last_read_file:
-        last_read_file.write(feed[-1].id)
+        return feed[-1].id
 
 if __name__ == "__main__":
-    feed = get_feed()
-    update(feed)
+    feed = RSS.get_unread_feed("phoronix", "https://www.phoronix.com/rss.php")
+    last_read = Telegram.update(feed)
+    RSS.save_last_unread("phoronix", last_read)
