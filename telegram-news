@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # TODO: replace stderr with "import logging"
 from sys import stderr
+from os import environ
 import feedparser
 import telegram
 from time import sleep
@@ -36,20 +37,8 @@ class RSS:
 class Telegram:
     # return read/sent sent id
     def update(feed) -> str:
-        try:
-            with open("token") as token_file:
-                token = token_file.read().strip()
-        except FileNotFoundError:
-            print("token file is not found. Put your bot token in a file called 'token' in the working directory", file=stderr)
-            exit(1)
-    
-        try:
-            with open("chat_id") as chat_id_file:
-                chat_id = chat_id_file.read().strip()
-        except FileNotFoundError:
-            print("chat_id file is not found. Put your target chat id in a file called 'chat_id' in the working directory", file=stderr)
-            exit(1)
-    
+        token = environ["TOKEN"]
+        chat_id = environ["CHAT_ID"]
         
         bot = telegram.Bot(token)
         counter = 0
