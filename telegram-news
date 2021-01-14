@@ -42,19 +42,21 @@ class RSS:
 class Telegram:
     # return read/sent sent id
     @staticmethod
-    def update(name: str, feed: list) -> str:
+    def update(name: str, feed: list, topic: str = "", disable_web_page_preview: bool = True) -> str:
         token = environ["TOKEN"]
         chat_id = environ[f"CHAT_ID_{name.upper()}"]
         
         bot = telegram.Bot(token)
         counter = 0
+        if topic:
+            topic += "\n\n"
         for article in feed:
             # telegram doesn't allow sending more than 20 messages per minute to the same chat
             if counter >= 20:
                 counter = 0
                 sleep(60)
-        
-            bot.send_message(chat_id, f"<a href=\"{article.link}\">{article.title}</a>\n{article.description}", parse_mode="HTML", disable_web_page_preview=True)
+
+            bot.send_message(chat_id, f"{topic}<a href=\"{article.link}\">{article.title}</a>\n{article.description}", parse_mode="HTML", disable_web_page_preview=disable_web_page_preview)
             counter += 1
             sleep(1)
 
@@ -62,5 +64,9 @@ class Telegram:
 
 if __name__ == "__main__":
     feed = RSS.get_unread_feed("phoronix", "https://www.phoronix.com/rss.php")
-    last_read = Telegram.update(feed)
+    last_read = Telegram.update("phoronix", feed)
     RSS.save_last_unread("phoronix", last_read)
+
+    feed = RSS.get_unread_feed("cs", "https://blog.counter-strike.net/index.php/feed/")
+    last_read = Telegram.update("cs", feed, "#CS_Blog")
+    RSS.save_last_unread("cs", last_read)
