@@ -64,7 +64,7 @@ if __name__ == "__main__":
         last_read = Telegram.update("phoronix", feed)
         RSS.save_last_unread("phoronix", last_read)
 
-    feed = RSS.get_unread_feed("cs", "https://blog.counter-strike.net/index.php/feed/")
+    feed = RSS.get_unread_feed("cs-blog", "https://blog.counter-strike.net/index.php/feed/")
     if feed:
         last_read = Telegram.update("cs", feed, "#CS_Blog")
-        RSS.save_last_unread("cs", last_read)
+        RSS.save_last_unread("cs-blog", last_read)
