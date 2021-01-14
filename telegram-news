@@ -7,20 +7,24 @@ import telegram
 from time import sleep
 
 class RSS:
+    @staticmethod
     def get_unread_feed(name: str, url: str):
         feed = feedparser.parse(url) 
-        last_read_id = ""
+
         try:
-            with open(f"last/{name}", "r") as last_read_file:
+            with open(f"last-read/{name}", "r") as last_read_file:
                 last_read_id = last_read_file.read().strip()
         except FileNotFoundError:
             pass
         
         feed_unread = []
-        for item in feed.entries:
-            if item.id == last_read_id:
-                break
-            feed_unread.append(item)
+        if "last_read_id" in locals():
+            for item in feed.entries:
+                if item.id == last_read_id:
+                    break
+                feed_unread.append(item)
+        else:
+            feed_unread = feed.entries
         
         if not feed_unread:
             # TODO: mb there's a better way?
@@ -29,16 +33,18 @@ class RSS:
         feed_unread.reverse()
         return feed_unread
     
+    @staticmethod
     def save_last_unread(name: str, id: str):
-        with open("phoronix-last", "w") as last_read_file:
-            #last_read_file.write(id)
+        with open(f"last-read/{name}", "w") as last_read_file:
+            last_read_file.write(id)
             pass
 
 class Telegram:
     # return read/sent sent id
-    def update(feed) -> str:
+    @staticmethod
+    def update(name: str, feed: list) -> str:
         token = environ["TOKEN"]
-        chat_id = environ["CHAT_ID"]
+        chat_id = environ[f"CHAT_ID_{name.upper()}"]
         
         bot = telegram.Bot(token)
         counter = 0
