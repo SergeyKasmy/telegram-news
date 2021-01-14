@@ -26,10 +26,6 @@ class RSS:
         else:
             feed_unread = feed.entries
         
-        if not feed_unread:
-            # TODO: mb there's a better way?
-            exit(0)
-        
         feed_unread.reverse()
         return feed_unread
     
@@ -64,9 +60,11 @@ class Telegram:
 
 if __name__ == "__main__":
     feed = RSS.get_unread_feed("phoronix", "https://www.phoronix.com/rss.php")
-    last_read = Telegram.update("phoronix", feed)
-    RSS.save_last_unread("phoronix", last_read)
+    if feed:
+        last_read = Telegram.update("phoronix", feed)
+        RSS.save_last_unread("phoronix", last_read)
 
     feed = RSS.get_unread_feed("cs", "https://blog.counter-strike.net/index.php/feed/")
-    last_read = Telegram.update("cs", feed, "#CS_Blog")
-    RSS.save_last_unread("cs", last_read)
+    if feed:
+        last_read = Telegram.update("cs", feed, "#CS_Blog")
+        RSS.save_last_unread("cs", last_read)
