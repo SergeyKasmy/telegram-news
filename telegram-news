@@ -1,70 +1,114 @@
 #!/usr/bin/env python3
 # TODO: replace stderr with "import logging"
-from sys import stderr
+from bs4 import BeautifulSoup
 from os import environ
-import feedparser
-import telegram
+from sys import stderr
 from time import sleep
+import feedparser
+import requests
+import telegram
 
-class RSS:
-    @staticmethod
-    def get_unread_feed(name: str, url: str):
-        feed = feedparser.parse(url) 
+SAVE_FILE_NAME_PHORONIX   = "phoronix"
+SAVE_FILE_NAME_CS_BLOG    = "cs-blog"
+SAVE_FILE_NAME_CS_UPDATES = "cs-updates"
 
-        try:
-            with open(f"last-read/{name}", "r") as last_read_file:
-                last_read_id = last_read_file.read().strip()
-        except FileNotFoundError:
-            pass
-        
-        feed_unread = []
-        if "last_read_id" in locals():
-            for item in feed.entries:
-                if item.id == last_read_id:
-                    break
-                feed_unread.append(item)
-        else:
-            feed_unread = feed.entries
-        
-        feed_unread.reverse()
-        return feed_unread
+def get_last_unread(name: str) -> str:
+    try: 
+        with open(f"last-read/{name}", "r") as last_read_file:
+            return last_read_file.read().strip()
+    except FileNotFoundError:
+        pass
+
+    return ""
+
+def save_last_unread(name: str, id: str) -> None:
+    with open(f"last-read/{name}", "w") as last_read_file:
+        last_read_file.write(id)
+
+def get_unread_rss_feed(name: str, url: str) -> list:
+    feed = feedparser.parse(url) 
+    last_read_id = get_last_unread(name)
+
+    feed_unread = []
+    if "last_read_id" in locals():
+        for item in feed.entries:
+            if item.id == last_read_id:
+                break
+            feed_unread.append(item)
+    else:
+        feed_unread = feed.entries
     
-    @staticmethod
-    def save_last_unread(name: str, id: str):
-        with open(f"last-read/{name}", "w") as last_read_file:
-            last_read_file.write(id)
-            pass
+    feed_unread.reverse()
+    return feed_unread
 
-class Telegram:
-    # return read/sent sent id
-    @staticmethod
-    def update(name: str, feed: list, topic: str = "", disable_web_page_preview: bool = True) -> str:
-        token = environ["TOKEN"]
-        chat_id = environ[f"CHAT_ID_{name.upper()}"]
-        
-        bot = telegram.Bot(token)
-        counter = 0
-        if topic:
-            topic += "\n\n"
-        for article in feed:
-            # telegram doesn't allow sending more than 20 messages per minute to the same chat
-            if counter >= 20:
-                counter = 0
-                sleep(60)
+def get_unread_cs_updates() -> list:
+    cs_updates_changelog = "https://blog.counter-strike.net/index.php/category/updates/"
 
-            bot.send_message(chat_id, f"{topic}<a href=\"{article.link}\">{article.title}</a>\n{article.description}", parse_mode="HTML", disable_web_page_preview=disable_web_page_preview)
-            counter += 1
-            sleep(1)
+    soup = BeautifulSoup(requests.get(cs_updates_changelog).text, "html.parser")
+    last_read_id = get_last_unread(SAVE_FILE_NAME_CS_UPDATES)
+    feed = []
+    for update_html in soup.find(id="post_container").find_all("div", {"class": "inner_post"}):
+        link = update_html.h2.a.get("href")
 
-        return feed[-1].id
+        if link == last_read_id:
+            break
+
+        title = update_html.h2.a.string
+
+        description_list = update_html("p")
+        description = ""
+        for item in description_list:
+            if item.get("class") == ["post_date"]:
+                continue
+
+            description += item.text 
+            description += "\n\n"
+
+        article = {
+                "title": title,
+                "description": description,
+                "link": link,
+                "id": link
+                }
+        feed.append(article)
+
+    feed.reverse()
+    return feed
+
+# return read/sent sent id
+def update(name: str, feed: list, topic: str = "", disable_web_page_preview: bool = True) -> str:
+    token = environ["TOKEN"]
+    chat_id = environ[f"CHAT_ID_{name.upper()}"]
+    
+    bot = telegram.Bot(token)
+    counter = 0
+    if topic:
+        topic += "\n\n"
+    for article in feed:
+        # telegram doesn't allow sending more than 20 messages per minute to the same chat
+        if counter >= 20:
+            counter = 0
+            sleep(90)
+
+        bot.send_message(chat_id, f"{topic}<a href=\"{article['link']}\">{article['title']}</a>\n{article['description']}", parse_mode="HTML", disable_web_page_preview=disable_web_page_preview)
+        counter += 1
+        sleep(1)
+
+    return feed[-1]["id"]
 
 if __name__ == "__main__":
-    feed = RSS.get_unread_feed("phoronix", "https://www.phoronix.com/rss.php")
+    get_unread_cs_updates()
+    feed = get_unread_rss_feed(SAVE_FILE_NAME_PHORONIX, "https://www.phoronix.com/rss.php")
     if feed:
-        last_read = Telegram.update("phoronix", feed)
-        RSS.save_last_unread("phoronix", last_read)
+        last_read = update("phoronix", feed)
+        save_last_unread(SAVE_FILE_NAME_PHORONIX, last_read)
 
-    feed = RSS.get_unread_feed("cs-blog", "https://blog.counter-strike.net/index.php/feed/")
+    feed = get_unread_rss_feed(SAVE_FILE_NAME_CS_BLOG, "https://blog.counter-strike.net/index.php/feed/")
     if feed:
-        last_read = Telegram.update("cs", feed, "#CS_Blog")
-        RSS.save_last_unread("cs-blog", last_read)
+        last_read = update("cs", feed, "#CS_Blog")
+        save_last_unread(SAVE_FILE_NAME_CS_BLOG, last_read)
+
+    feed = get_unread_cs_updates()
+    if feed:
+        last_read = update("cs", feed, "#CS_Updates")
+        save_last_unread(SAVE_FILE_NAME_CS_UPDATES, last_read)
