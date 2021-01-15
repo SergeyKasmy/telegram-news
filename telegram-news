@@ -8,29 +8,44 @@ import feedparser
 import requests
 import telegram
 
-SAVE_FILE_NAME_PHORONIX   = "phoronix"
-SAVE_FILE_NAME_CS_BLOG    = "cs-blog"
-SAVE_FILE_NAME_CS_UPDATES = "cs-updates"
+class CONFIG:
+    class phoronix:
+        link = "https://www.phoronix.com/rss.php"
+        chat_id = "CHAT_ID_PHORONIX"
+        save_file = "phoronix"
+        title = ""
 
-def get_last_unread(name: str) -> str:
+    class cs_blog:
+        link = "https://blog.counter-strike.net/index.php/feed/"
+        chat_id = "CHAT_ID_CS"
+        save_file = "cs-blog"
+        title = "#CS_Blog"
+
+    class cs_updates:
+        link = "https://blog.counter-strike.net/index.php/category/updates/"
+        chat_id = "CHAT_ID_CS"
+        save_file = "cs-updates"
+        title = "#CS_Updates"
+
+def get_last_unread(save_file: str) -> str:
     try: 
-        with open(f"last-read/{name}", "r") as last_read_file:
+        with open(f"last-read/{save_file}", "r") as last_read_file:
             return last_read_file.read().strip()
     except FileNotFoundError:
         pass
 
     return ""
 
-def save_last_unread(name: str, id: str) -> None:
-    with open(f"last-read/{name}", "w") as last_read_file:
+def save_last_unread(save_file: str, id: str) -> None:
+    with open(f"last-read/{save_file}", "w") as last_read_file:
         last_read_file.write(id)
 
-def get_unread_rss_feed(name: str, url: str) -> list:
+def get_unread_rss_feed(url: str, save_file: str) -> list:
     feed = feedparser.parse(url) 
-    last_read_id = get_last_unread(name)
+    last_read_id = get_last_unread(save_file)
 
     feed_unread = []
-    if "last_read_id" in locals():
+    if last_read_id:
         for item in feed.entries:
             if item.id == last_read_id:
                 break
@@ -45,7 +60,7 @@ def get_unread_cs_updates() -> list:
     cs_updates_changelog = "https://blog.counter-strike.net/index.php/category/updates/"
 
     soup = BeautifulSoup(requests.get(cs_updates_changelog).text, "html.parser")
-    last_read_id = get_last_unread(SAVE_FILE_NAME_CS_UPDATES)
+    last_read_id = get_last_unread(CONFIG.cs_updates.save_file)
     feed = []
     for update_html in soup.find(id="post_container").find_all("div", {"class": "inner_post"}):
         link = update_html.h2.a.get("href")
@@ -76,9 +91,9 @@ def get_unread_cs_updates() -> list:
     return feed
 
 # return read/sent sent id
-def update(name: str, feed: list, topic: str = "", disable_web_page_preview: bool = True) -> str:
+def update(feed: list, chat_id: str, topic: str = "", disable_web_page_preview: bool = True) -> str:
     token = environ["TOKEN"]
-    chat_id = environ[f"CHAT_ID_{name.upper()}"]
+    chat_id = environ[chat_id]
     
     bot = telegram.Bot(token)
     counter = 0
@@ -97,18 +112,14 @@ def update(name: str, feed: list, topic: str = "", disable_web_page_preview: boo
     return feed[-1]["id"]
 
 if __name__ == "__main__":
-    get_unread_cs_updates()
-    feed = get_unread_rss_feed(SAVE_FILE_NAME_PHORONIX, "https://www.phoronix.com/rss.php")
-    if feed:
-        last_read = update("phoronix", feed)
-        save_last_unread(SAVE_FILE_NAME_PHORONIX, last_read)
-
-    feed = get_unread_rss_feed(SAVE_FILE_NAME_CS_BLOG, "https://blog.counter-strike.net/index.php/feed/")
-    if feed:
-        last_read = update("cs", feed, "#CS_Blog")
-        save_last_unread(SAVE_FILE_NAME_CS_BLOG, last_read)
-
-    feed = get_unread_cs_updates()
-    if feed:
-        last_read = update("cs", feed, "#CS_Updates")
-        save_last_unread(SAVE_FILE_NAME_CS_UPDATES, last_read)
+    items = (
+            ( get_unread_rss_feed(CONFIG.phoronix.link, CONFIG.phoronix.save_file), CONFIG.phoronix ),
+            ( get_unread_rss_feed(CONFIG.cs_blog.link, CONFIG.cs_blog.save_file), CONFIG.cs_blog ),
+            ( get_unread_cs_updates(), CONFIG.cs_updates )
+            )
+    for item in items:
+        feed = item[0]
+        config = item[1]
+        if feed:
+            last_read = update(feed, config.chat_id, config.title)
+            save_last_unread(config.save_file, last_read)
