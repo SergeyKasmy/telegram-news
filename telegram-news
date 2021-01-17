@@ -28,7 +28,7 @@ class CONFIG:
         title = "#CS_Updates"
 
 def get_last_read_item(save_file_name: str) -> str:
-    save_file = f"last_read/{save_file_name}"
+    save_file = f"last-read/{save_file_name}"
     try: 
         logging.info(f"Getting the last read item from {save_file}")
         with open(save_file, "r") as last_read_file:
@@ -39,7 +39,7 @@ def get_last_read_item(save_file_name: str) -> str:
     return ""
 
 def save_last_read_item(save_file_name: str, item_id: str) -> None:
-    save_file = f"last_read/{save_file_name}"
+    save_file = f"last-read/{save_file_name}"
     logging.info(f"Saving the last read item {item_id} to {save_file}")
     with open(save_file, "w") as last_read_file:
         last_read_file.write(item_id)
@@ -107,18 +107,19 @@ def update(feed: list, chat_id: str, topic: str = "", disable_web_page_preview: 
     counter = 0
     if topic:
         topic += "\n\n"
-    for article in feed:
-        counter += 1
-        # telegram doesn't allow sending more than 20 messages per minute to the same chat
-        if counter % 20 == 0:
-            logging.info("Anti-spam protection message limit almost reached, waiting...")
-            sleep(90)
-
-        message = f"{topic}<a href=\"{article['link']}\">{article['title']}</a>\n{article['description']}"
-        logging.info(f"Sending message {article['title']}")
-        logging.debug(f"   Full message contents:\n{message}")
-        telegram.Bot(token).send_message(chat_id, message, parse_mode="HTML", disable_web_page_preview=disable_web_page_preview)
-        sleep(2)
+    for item in feed:
+        message = f"{topic}<a href=\"{item['link']}\">{item['title']}</a>\n{item['description']}"
+        for attempt in range(3):
+            logging.info(f"Sending message ({item['title']})")
+            logging.debug(f"   Full message contents:\n{message}")
+            try:
+                telegram.Bot(token).send_message(chat_id, message, parse_mode="HTML", disable_web_page_preview=disable_web_page_preview)
+            except telegram.error.RetryAfter as err:
+                logging.info(f"Flood control exceeded, retrying in {err.retry_after}s")
+                sleep(err.retry_after)
+            else:
+                break
+        sleep(1)
 
     logging.info(f"Sent {counter} messages to {chat_id}")
     return feed[-1]["id"]
