@@ -13,19 +13,19 @@ class CONFIG:
         link = "https://www.phoronix.com/rss.php"
         chat_id = "CHAT_ID_PHORONIX"
         save_file = "phoronix"
-        title = ""
+        topic = ""
 
     class cs_blog:
         link = "https://blog.counter-strike.net/index.php/feed/"
         chat_id = "CHAT_ID_CS"
         save_file = "cs-blog"
-        title = "#CS_Blog"
+        topic = "#CS_Blog"
 
     class cs_updates:
         link = "https://blog.counter-strike.net/index.php/category/updates/"
         chat_id = "CHAT_ID_CS"
         save_file = "cs-updates"
-        title = "#CS_Updates"
+        topic = "#CS_Updates"
 
 def get_last_read_item(save_file_name: str) -> str:
     save_file = f"last-read/{save_file_name}"
@@ -39,6 +39,7 @@ def get_last_read_item(save_file_name: str) -> str:
     return ""
 
 def save_last_read_item(save_file_name: str, item_id: str) -> None:
+    # TODO: create the directory if it doesn't exist
     save_file = f"last-read/{save_file_name}"
     logging.info(f"Saving the last read item {item_id} to {save_file}")
     with open(save_file, "w") as last_read_file:
@@ -99,12 +100,14 @@ def get_unread_cs_updates() -> list:
     return feed
 
 # return read/sent id
-def update(feed: list, chat_id: str, topic: str = "", disable_web_page_preview: bool = True) -> str:
+# TODO: mb find a better way than passing the entire config to the function??
+def update(feed: list, config, disable_web_page_preview: bool = True):
     token = environ["TOKEN"]
-    chat_id = environ[chat_id]
+    chat_id = environ[config.chat_id]
     logging.info(f"Sending the feed to ({chat_id}) with token ({token})")
     
     counter = 0
+    topic = config.topic
     if topic:
         topic += "\n\n"
     for item in feed:
@@ -117,12 +120,18 @@ def update(feed: list, chat_id: str, topic: str = "", disable_web_page_preview: 
             except telegram.error.RetryAfter as err:
                 logging.info(f"Flood control exceeded, retrying in {err.retry_after}s")
                 sleep(err.retry_after)
+            except:
+                if counter > 0:
+                    # save the previous item as the last read one
+                    save_last_read_item(config.save_file, feed[counter - 1]["id"])
+                raise
             else:
                 break
+        counter += 1
         sleep(1)
 
     logging.info(f"Sent {counter} messages to {chat_id}")
-    return feed[-1]["id"]
+    save_last_read_item(feed[-1]["id"])
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
@@ -135,5 +144,4 @@ if __name__ == "__main__":
         feed = item[0]
         config = item[1]
         if feed:
-            last_read = update(feed, config.chat_id, config.title)
-            save_last_read_item(config.save_file, last_read)
+            update(feed, config)
