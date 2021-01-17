@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-# TODO: replace stderr with "import logging"
 from bs4 import BeautifulSoup
 from os import environ
 from sys import stderr
 from time import sleep
 import feedparser
+import logging
 import requests
 import telegram
 
@@ -27,22 +27,27 @@ class CONFIG:
         save_file = "cs-updates"
         title = "#CS_Updates"
 
-def get_last_unread(save_file: str) -> str:
+def get_last_read_item(save_file_name: str) -> str:
+    save_file = f"last_read/{save_file_name}"
     try: 
-        with open(f"last-read/{save_file}", "r") as last_read_file:
+        logging.info(f"Getting the last read item from {save_file}")
+        with open(save_file, "r") as last_read_file:
             return last_read_file.read().strip()
     except FileNotFoundError:
-        pass
+        logging.info(f"{save_file} doesn't exist, assuming no item has ever been read yet")
 
     return ""
 
-def save_last_unread(save_file: str, id: str) -> None:
-    with open(f"last-read/{save_file}", "w") as last_read_file:
-        last_read_file.write(id)
+def save_last_read_item(save_file_name: str, item_id: str) -> None:
+    save_file = f"last_read/{save_file_name}"
+    logging.info(f"Saving the last read item {item_id} to {save_file}")
+    with open(save_file, "w") as last_read_file:
+        last_read_file.write(item_id)
 
 def get_unread_rss_feed(url: str, save_file: str) -> list:
-    feed = feedparser.parse(url) 
-    last_read_id = get_last_unread(save_file)
+    logging.debug(f"Getting RSS from feed {url}")
+    feed = feedparser.parse(url)
+    last_read_id = get_last_read_item(save_file)
 
     feed_unread = []
     if last_read_id:
@@ -53,14 +58,16 @@ def get_unread_rss_feed(url: str, save_file: str) -> list:
     else:
         feed_unread = feed.entries
     
+    logging.info(f"Got {len(feed_unread)} unread items from RSS")
     feed_unread.reverse()
     return feed_unread
 
 def get_unread_cs_updates() -> list:
     cs_updates_changelog = "https://blog.counter-strike.net/index.php/category/updates/"
 
+    logging.info("Getting items from the CS updates site")
     soup = BeautifulSoup(requests.get(cs_updates_changelog).text, "html.parser")
-    last_read_id = get_last_unread(CONFIG.cs_updates.save_file)
+    last_read_id = get_last_read_item(CONFIG.cs_updates.save_file)
     feed = []
     for update_html in soup.find(id="post_container").find_all("div", {"class": "inner_post"}):
         link = update_html.h2.a.get("href")
@@ -87,39 +94,45 @@ def get_unread_cs_updates() -> list:
                 }
         feed.append(article)
 
+    logging.info(f"Got {len(feed)} unread items from the CS updates site")
     feed.reverse()
     return feed
 
-# return read/sent sent id
+# return read/sent id
 def update(feed: list, chat_id: str, topic: str = "", disable_web_page_preview: bool = True) -> str:
     token = environ["TOKEN"]
     chat_id = environ[chat_id]
+    logging.info(f"Sending the feed to ({chat_id}) with token ({token})")
     
-    bot = telegram.Bot(token)
     counter = 0
     if topic:
         topic += "\n\n"
     for article in feed:
+        counter += 1
         # telegram doesn't allow sending more than 20 messages per minute to the same chat
-        if counter >= 20:
-            counter = 0
+        if counter % 20 == 0:
+            logging.info("Anti-spam protection message limit almost reached, waiting...")
             sleep(90)
 
-        bot.send_message(chat_id, f"{topic}<a href=\"{article['link']}\">{article['title']}</a>\n{article['description']}", parse_mode="HTML", disable_web_page_preview=disable_web_page_preview)
-        counter += 1
-        sleep(1)
+        message = f"{topic}<a href=\"{article['link']}\">{article['title']}</a>\n{article['description']}"
+        logging.info(f"Sending message {article['title']}")
+        logging.debug(f"   Full message contents:\n{message}")
+        telegram.Bot(token).send_message(chat_id, message, parse_mode="HTML", disable_web_page_preview=disable_web_page_preview)
+        sleep(2)
 
+    logging.info(f"Sent {counter} messages to {chat_id}")
     return feed[-1]["id"]
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
     items = (
-            ( get_unread_rss_feed(CONFIG.phoronix.link, CONFIG.phoronix.save_file), CONFIG.phoronix ),
-            ( get_unread_rss_feed(CONFIG.cs_blog.link, CONFIG.cs_blog.save_file), CONFIG.cs_blog ),
-            ( get_unread_cs_updates(), CONFIG.cs_updates )
+            ( get_unread_rss_feed(CONFIG.phoronix.link, CONFIG.phoronix.save_file), CONFIG.phoronix ),  # phoronix
+            ( get_unread_rss_feed(CONFIG.cs_blog.link, CONFIG.cs_blog.save_file), CONFIG.cs_blog ),     # cs blog
+            ( get_unread_cs_updates(), CONFIG.cs_updates )                                              # cs updates
             )
     for item in items:
         feed = item[0]
         config = item[1]
         if feed:
             last_read = update(feed, config.chat_id, config.title)
-            save_last_unread(config.save_file, last_read)
+            save_last_read_item(config.save_file, last_read)
